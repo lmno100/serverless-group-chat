@@ -122,6 +122,29 @@ el('sendBtn').onclick = () => {
 };
 el('copyBtn').onclick = () => { el('roomLink').select(); (navigator.clipboard && navigator.clipboard.writeText(el('roomLink').value)) || document.execCommand('copy'); log('room link copied'); };
 
+// Speech-to-text runs in the SPEAKER's browser (where the mic audio is) via
+// the Web Speech API, and rides the existing data-channel chat path as text.
+let recog = null;
+el('micBtn').onclick = () => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { log('speech recognition not supported in this browser (try Chrome/Edge)'); return; }
+  if (recog) { recog.stop(); recog = null; el('micBtn').textContent = '🎤 transcribe: off'; return; }
+  recog = new SR();
+  recog.continuous = true; recog.interimResults = false; recog.lang = 'en-US';
+  recog.onresult = (e) => {
+    const text = e.results[e.results.length - 1][0].transcript.trim();
+    if (!text) return;
+    const line = '🎤 ' + text;
+    appendChat(myId, line);
+    for (const { dc } of peers.values()) if (dc && dc.readyState === 'open') dc.send(line);
+  };
+  recog.onerror = (e) => log('speech: ' + e.error);
+  recog.onend = () => { if (recog) recog.start(); };  // keep it running
+  recog.start();
+  el('micBtn').textContent = '🎤 transcribe: on';
+  log('transcribing your speech → room (browser-native STT)');
+};
+
 function addVideo(id, stream, muted) {
   let v = el('v-' + id);
   if (!v) {
